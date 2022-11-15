@@ -1,8 +1,9 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
 
 const { Client } = require('discord-rpc'); // eslint-disable-line
-import { commands, ExtensionContext, StatusBarAlignment, StatusBarItem, window, workspace, debug } from 'vscode';
+import { isEqual } from 'lodash-es';
 import throttle from 'lodash-es/throttle';
+import { commands, debug, ExtensionContext, StatusBarAlignment, StatusBarItem, window, workspace } from 'vscode';
 
 import { activity } from './activity';
 import { CLIENT_ID, CONFIG_KEYS } from './constants';
@@ -27,9 +28,10 @@ export function cleanUp() {
 }
 
 async function sendActivity() {
-	state = {
-		...(await activity(state)),
-	};
+	const newState = await activity(state);
+	if(isEqual(state, newState)) return;
+	log(LogLevel.Debug, '---------------------- Sending activity ----------------------');
+	state = { ...newState };
 	rpc.setActivity(state);
 }
 
