@@ -15,7 +15,7 @@ import {
 	VSCODE_INSIDERS_IMAGE_KEY,
 } from './constants';
 import { log, LogLevel } from './logger';
-import { getConfig, getGit, resolveFileIcon, toLower, toTitle, toUpper } from './util';
+import { getConfig, getGit, resolveFileIcon2, toLower, toTitle, toUpper } from './util';
 
 interface ActivityPayload {
 	details?: string | undefined;
@@ -70,7 +70,7 @@ async function fileDetails(_raw: string, document: TextDocument, selection: Sele
 
 		raw = raw.replace(
 			REPLACE_KEYS.FileSize,
-			`${originalSize > 1000 ? size.toFixed(2) : size}${FILE_SIZES[currentDivision]}`,
+			`${originalSize > 1000 ? size.toFixed(2) : size}${FILE_SIZES[currentDivision]}`
 		);
 	}
 
@@ -80,7 +80,7 @@ async function fileDetails(_raw: string, document: TextDocument, selection: Sele
 		if (git?.repositories.length) {
 			raw = raw.replace(
 				REPLACE_KEYS.GitBranch,
-				git.repositories.find((repo) => repo.ui.selected)?.state.HEAD?.name ?? FAKE_EMPTY,
+				git.repositories.find((repo) => repo.ui.selected)?.state.HEAD?.name ?? FAKE_EMPTY
 			);
 		} else {
 			raw = raw.replace(REPLACE_KEYS.GitBranch, UNKNOWN_GIT_BRANCH);
@@ -94,7 +94,7 @@ async function fileDetails(_raw: string, document: TextDocument, selection: Sele
 				git.repositories
 					.find((repo) => repo.ui.selected)
 					?.state.remotes[0].fetchUrl?.split('/')[1]
-					.replace('.git', '') ?? FAKE_EMPTY,
+					.replace('.git', '') ?? FAKE_EMPTY
 			);
 		} else {
 			raw = raw.replace(REPLACE_KEYS.GitRepoName, UNKNOWN_GIT_REPO_NAME);
@@ -117,12 +117,13 @@ async function details(idling: CONFIG_KEYS, editing: CONFIG_KEYS, debugging: CON
 		const noWorkspaceFound = config[CONFIG_KEYS.LowerDetailsNoWorkspaceFound].replace(REPLACE_KEYS.Empty, FAKE_EMPTY);
 		const workspaceFolder = workspace.getWorkspaceFolder(window.activeTextEditor.document.uri);
 		const workspaceFolderName = workspaceFolder?.name ?? noWorkspaceFound;
-		const workspaceName = workspace.name?.replace(REPLACE_KEYS.VSCodeWorkspace, EMPTY) ?? workspaceFolderName;
+		const workspaceName =
+			workspace.name?.replace(REPLACE_KEYS.VSCodeWorkspace, EMPTY).trim() ?? workspaceFolderName.trim();
 		const workspaceAndFolder = `${workspaceName}${
 			workspaceFolderName === FAKE_EMPTY ? '' : ` - ${workspaceFolderName}`
 		}`;
 
-		const fileIcon = resolveFileIcon(window.activeTextEditor.document);
+		//const fileIcon = await resolveFileIcon2(window.activeTextEditor.document);
 
 		if (debug.activeDebugSession) {
 			raw = config[debugging] as string;
@@ -131,11 +132,20 @@ async function details(idling: CONFIG_KEYS, editing: CONFIG_KEYS, debugging: CON
 		}
 
 		if (workspaceFolder) {
+			log(LogLevel.Debug, `Workspace name: ${workspaceName}`);
 			const { name } = workspaceFolder;
-			const relativePath = workspace.asRelativePath(window.activeTextEditor.document.fileName).split(sep);
+			log(LogLevel.Debug, `Workspace folder name: ${name}`);
+			const relativePath = workspace.asRelativePath(window.activeTextEditor.document.fileName).split('/');
+			log(LogLevel.Debug, `Relative path: ${relativePath}`);
 			relativePath.splice(-1, 1);
-			raw = raw.replace(REPLACE_KEYS.FullDirName, `${name}${sep}${relativePath.join(sep)}`);
-		}
+			// do not duplicate workspace folder and pwd base folder
+			if (relativePath[0]?.trim() === name?.trim()) relativePath.splice(0, 1);
+			// do not duplicate workspace name and fulldirname
+			raw = raw.replace(
+				REPLACE_KEYS.FullDirName,
+				`${name === workspaceName ? '' : `${name}/`}${relativePath.join('/')}`
+			);
+		} else raw = raw.replace(REPLACE_KEYS.FullDirName, FAKE_EMPTY);
 
 		try {
 			raw = await fileDetails(raw, window.activeTextEditor.document, window.activeTextEditor.selection);
@@ -147,10 +157,10 @@ async function details(idling: CONFIG_KEYS, editing: CONFIG_KEYS, debugging: CON
 			.replace(REPLACE_KEYS.DirName, dirName)
 			.replace(REPLACE_KEYS.Workspace, workspaceName)
 			.replace(REPLACE_KEYS.WorkspaceFolder, workspaceFolderName)
-			.replace(REPLACE_KEYS.WorkspaceAndFolder, workspaceAndFolder)
-			.replace(REPLACE_KEYS.LanguageLowerCase, toLower(fileIcon))
-			.replace(REPLACE_KEYS.LanguageTitleCase, toTitle(fileIcon))
-			.replace(REPLACE_KEYS.LanguageUpperCase, toUpper(fileIcon));
+			.replace(REPLACE_KEYS.WorkspaceAndFolder, workspaceAndFolder);
+		// .replace(REPLACE_KEYS.LanguageLowerCase, toLower(fileIcon))
+		// .replace(REPLACE_KEYS.LanguageTitleCase, toTitle(fileIcon))
+		// .replace(REPLACE_KEYS.LanguageUpperCase, toUpper(fileIcon));
 	}
 
 	return raw;
@@ -213,11 +223,14 @@ export async function activity(previous: ActivityPayload = {}) {
 	}
 
 	if (window.activeTextEditor) {
-		const largeImageKey = resolveFileIcon(window.activeTextEditor.document);
+		log(LogLevel.Debug, 'Found active text editor');
+		const [largeImageKey, largeImageTextRaw] = await resolveFileIcon2(window.activeTextEditor.document);
+		log(LogLevel.Debug, `Large image key: ${largeImageKey}`);
+
 		const largeImageText = config[CONFIG_KEYS.LargeImage]
-			.replace(REPLACE_KEYS.LanguageLowerCase, toLower(largeImageKey))
-			.replace(REPLACE_KEYS.LanguageTitleCase, toTitle(largeImageKey))
-			.replace(REPLACE_KEYS.LanguageUpperCase, toUpper(largeImageKey))
+			.replace(REPLACE_KEYS.LanguageLowerCase, toLower(largeImageTextRaw))
+			.replace(REPLACE_KEYS.LanguageTitleCase, toTitle(largeImageTextRaw))
+			.replace(REPLACE_KEYS.LanguageUpperCase, toUpper(largeImageTextRaw))
 			.padEnd(2, FAKE_EMPTY);
 
 		state = {
@@ -230,7 +243,7 @@ export async function activity(previous: ActivityPayload = {}) {
 				: await details(
 						CONFIG_KEYS.LowerDetailsIdling,
 						CONFIG_KEYS.LowerDetailsEditing,
-						CONFIG_KEYS.LowerDetailsDebugging,
+						CONFIG_KEYS.LowerDetailsDebugging
 				  ),
 		};
 

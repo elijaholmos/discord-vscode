@@ -26,6 +26,7 @@ export const enum REPLACE_KEYS {
 	VSCodeWorkspace = '(Workspace)',
 	WorkspaceFolder = '{workspace_folder}',
 	WorkspaceAndFolder = '{workspace_and_folder}',
+	WorkspaceAndFullDirName = '{workspace_and_full_dir_name}',
 	LanguageLowerCase = '{lang}',
 	LanguageTitleCase = '{Lang}',
 	LanguageUpperCase = '{LANG}',

@@ -5,22 +5,28 @@
 	"description": "Update your discord status with a rich presence.",
 	"private": true,
 	"author": {
-		"name": "iCrawl",
-		"email": "icrawltogo@gmail.com"
+		"name": "Elijah O",
+		"email": "eli.olmos9@gmail.com"
 	},
 	"contributors": [
+		{
+			"name": "iCrawl",
+			"email": "icrawltogo@gmail.com"
+		},
 		{
 			"name": "Frangu Vlad",
 			"email": "kingdgrizzle@gmail.com"
 		}
 	],
-	"publisher": "icrawl",
+	"publisher": "elijaholmos",
 	"license": "MIT",
 	"main": "./dist/extension",
 	"scripts": {
-		"build": "npm run lint && webpack --mode production",
+		"build": "webpack --mode production",
 		"lint": "prettier --check . && eslint src --ext mjs,js,ts",
-		"format": "prettier --write . && eslint src --ext mjs,js,ts --fix"
+		"format": "prettier --write . && eslint src --ext mjs,js,ts --fix",
+		"vscode:prepublish": "pnpm run build",
+		"package": "vsce package --no-dependencies --allow-star-activation"
 	},
 	"activationEvents": [
 		"*"
@@ -209,6 +215,6 @@
 		"webpack-cli": "^4.9.2"
 	},
 	"engines": {
-		"vscode": "^1.63.1"
+		"vscode": "^1.67.0"
 	}
 }
