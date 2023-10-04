@@ -1,9 +1,9 @@
 import { basename, join, normalize } from 'path';
-import { TextDocument, workspace, extensions, WorkspaceConfiguration, Uri } from 'vscode';
+import { TextDocument, Uri, WorkspaceConfiguration, extensions, workspace } from 'vscode';
 
 import { KNOWN_EXTENSIONS, KNOWN_LANGUAGES } from './constants';
 import type { API, GitExtension } from './git';
-import { log, LogLevel } from './logger';
+import { LogLevel, log } from './logger';
 
 let git: API | null | undefined;
 
@@ -86,17 +86,22 @@ export async function getGit() {
 }
 
 export async function resolveFileIcon2({ fileName, languageId }: TextDocument) {
+	type ThemeData = { id: string; label: string; path: string };
 	//get the file icon theme metadata
 	const icon_theme: string = workspace.getConfiguration().get('workbench.iconTheme')!;
-	//log(LogLevel.Debug, icon_theme);
-	const { id, extensionPath, packageJSON } = extensions.all.find((extension) => extension.id.includes(icon_theme))!;
+	log(LogLevel.Debug, icon_theme);
+	const { id, extensionPath, packageJSON } = extensions.all.find((extension) =>
+		extension.packageJSON?.contributes?.iconThemes?.find((theme: ThemeData) => theme?.id?.includes(icon_theme) ?? false)
+	)!;
 	const [author, name] = id.toLowerCase().split('.');
+	const themeData: ThemeData = packageJSON.contributes.iconThemes.find(
+		(theme: ThemeData) => theme?.id?.includes(icon_theme) ?? false
+	);
+	log(LogLevel.Debug, JSON.stringify(themeData));
 
 	const { fileNames, fileExtensions, languageIds, iconDefinitions } = JSON.parse(
 		Buffer.from(
-			await workspace.fs.readFile(
-				Uri.file(join(normalize(extensionPath), normalize(packageJSON.contributes.iconThemes[0].path)))
-			)
+			await workspace.fs.readFile(Uri.file(join(normalize(extensionPath), normalize(themeData.path))))
 		).toString('utf-8')
 	);
 	//everything above comment should be isolated to exports for performance
@@ -109,25 +114,31 @@ export async function resolveFileIcon2({ fileName, languageId }: TextDocument) {
 	//check file language
 	log(LogLevel.Debug, `Checking file language: ${languageId}`);
 	if (languageId in languageIds) iconType = languageIds[languageId];
-	// log(LogLevel.Debug, `res: ${languageId in languageIds} icon: ${iconType}`);
+	log(LogLevel.Debug, `res: ${languageId in languageIds} icon: ${iconType}`);
 	//check file extension
 	log(LogLevel.Debug, `Checking file extension: ${fileExtension}`);
 	if (fileExtension in fileExtensions) iconType = fileExtensions[fileExtension];
-	// log(LogLevel.Debug, `res: ${fileExtension in fileExtensions} icon: ${iconType}`);
+	log(LogLevel.Debug, `res: ${fileExtension in fileExtensions} icon: ${iconType}`);
 	//check file name
 	log(LogLevel.Debug, `Checking file name: ${fileName}`);
 	if (fileName in fileNames) iconType = fileNames[fileName];
-	// log(LogLevel.Debug, `res: ${fileName in fileNames} icon: ${iconType}`);
+	log(LogLevel.Debug, `res: ${fileName in fileNames} icon: ${iconType}`);
+
+	// merge the themeData.path with the iconDefinition iconPath to get a url to the icon
+	const fileLoc = join(
+		normalize(themeData.path.split('/').slice(0, -1).join('/')),
+		normalize(iconDefinitions[iconType].iconPath as string)
+	);
 
 	const iconUrl =
 		'https://vercel-svg-to-png.vercel.app/api/convert?' +
 		new URLSearchParams({
 			img: encodeURIComponent(
-				`https://${author}.vscode-unpkg.net/${author}/${name}/${packageJSON.version}/extension/icons/${iconDefinitions[
-					iconType
-				].iconPath
-					.split('/')
-					.pop()}`
+				// https://pkief.vscode-unpkg.net/PKief/material-icon-theme/4.15.0/extension/dist/icons/console.svg
+				// https://catppuccin.vscode-unpkg.net/Catppuccin/catppuccin-vsc-icons/0.28.0/extension/themes/mocha/icons/bat.svg
+				`https://${author.toLocaleLowerCase()}.vscode-unpkg.net/${author}/${name}/${
+					packageJSON.version
+				}/extension/${fileLoc}`
 			),
 			size: '1024',
 			pad: '0.32',
